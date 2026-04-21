@@ -24,3 +24,29 @@ def create_phishing_result(db: Session, prediction_data: dict):
 
 def get_history(db: Session, skip: int = 0, limit: int = 20):
     return db.query(models.PhishingInput).order_by(models.PhishingInput.timestamp.desc()).offset(skip).limit(limit).all()
+
+def create_network_scan(db: Session, scan_data: dict):
+    db_scan = models.NetworkScan(
+        target=scan_data["target"],
+        hostname=scan_data["hostname"],
+        overall_risk=scan_data["overall_risk"]
+    )
+    db.add(db_scan)
+    db.commit()
+    db.refresh(db_scan)
+    
+    for p in scan_data["ports"]:
+        db_port = models.PortScan(
+            scan_id=db_scan.id,
+            port=p["port"],
+            service=p["service"],
+            state="open",
+            risk=p["risk"]
+        )
+        db.add(db_port)
+    
+    db.commit()
+    return db_scan
+
+def get_recent_scans(db: Session, limit: int = 10):
+    return db.query(models.NetworkScan).order_by(models.NetworkScan.timestamp.desc()).limit(limit).all()

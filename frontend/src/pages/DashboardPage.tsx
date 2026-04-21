@@ -13,12 +13,12 @@ type HistoryItem = {
   }[];
 };
 
-const stats = [
-  { title: "Total Threats", value: "1,247", change: "+12%", icon: Shield, status: "danger" as const },
-  { title: "Phishing Attempts", value: "342", change: "+8%", icon: Fish, status: "warning" as const },
-  { title: "Active Alerts", value: "23", change: "-5%", icon: Bell, status: "warning" as const },
-  { title: "System Status", value: "Secure", change: "99.8% uptime", icon: Activity, status: "safe" as const },
-];
+type Stats = {
+  total_threats: number;
+  phishing_attempts: number;
+  active_alerts: number;
+  uptime: string;
+};
 
 const threatData = [
   { name: "Mon", threats: 32, phishing: 12 },
@@ -42,25 +42,39 @@ const statusColor = { safe: "text-primary", warning: "text-cyber-warning", dange
 
 export default function DashboardPage() {
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [statsData, setStatsData] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchHistory = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch("http://localhost:8000/api/history?limit=10");
-        if (response.ok) {
-          const data = await response.json();
+        const [historyRes, statsRes] = await Promise.all([
+          fetch("http://localhost:8000/api/history?limit=10"),
+          fetch("http://localhost:8000/api/stats")
+        ]);
+        
+        if (historyRes.ok) {
+          const data = await historyRes.json();
           setHistory(data);
         }
+        if (statsRes.ok) {
+          const statsJson = await statsRes.json();
+          setStatsData({
+             total_threats: statsJson.network_scans + statsJson.ids_alerts + statsJson.phishing_scans,
+             phishing_attempts: statsJson.phishing_scans,
+             active_alerts: statsJson.ids_alerts,
+             uptime: "99.9% uptime"
+          });
+        }
       } catch (err) {
-        console.error("Failed to fetch history:", err);
+        console.error("Failed to fetch dashboard data:", err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchHistory();
-    const interval = setInterval(fetchHistory, 10000); // Polling every 10s
+    fetchData();
+    const interval = setInterval(fetchData, 10000); // Polling every 10s
     return () => clearInterval(interval);
   }, []);
 
@@ -72,7 +86,12 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((s) => (
+        {[
+          { title: "Total Checks", value: statsData?.total_threats || 0, change: "Live", icon: Shield, status: "safe" as const },
+          { title: "Phishing Scans", value: statsData?.phishing_attempts || 0, change: "Live", icon: Fish, status: "warning" as const },
+          { title: "IDS Alerts", value: statsData?.active_alerts || 0, change: "Live", icon: Bell, status: "danger" as const },
+          { title: "System Status", value: "Active", change: statsData?.uptime || "Monitoring", icon: Activity, status: "safe" as const },
+        ].map((s) => (
           <div key={s.title} className="cyber-card">
             <div className="flex items-start justify-between">
               <div>

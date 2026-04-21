@@ -8,30 +8,6 @@ interface ScanResult {
   overallRisk: string;
 }
 
-const dummyResults: Record<string, ScanResult> = {
-  "192.168.1.1": {
-    ip: "192.168.1.1", hostname: "gateway.local",
-    ports: [
-      { port: 22, service: "SSH", state: "open", risk: "medium" },
-      { port: 80, service: "HTTP", state: "open", risk: "low" },
-      { port: 443, service: "HTTPS", state: "open", risk: "low" },
-      { port: 8080, service: "HTTP-Proxy", state: "open", risk: "medium" },
-    ],
-    overallRisk: "Medium",
-  },
-  "10.0.0.5": {
-    ip: "10.0.0.5", hostname: "webserver.internal",
-    ports: [
-      { port: 21, service: "FTP", state: "open", risk: "high" },
-      { port: 22, service: "SSH", state: "open", risk: "medium" },
-      { port: 80, service: "HTTP", state: "open", risk: "low" },
-      { port: 3306, service: "MySQL", state: "open", risk: "high" },
-      { port: 6379, service: "Redis", state: "open", risk: "high" },
-    ],
-    overallRisk: "High",
-  },
-};
-
 const riskColor = { low: "text-primary", medium: "text-cyber-warning", high: "text-destructive" };
 
 export default function NetworkScannerPage() {
@@ -39,14 +15,37 @@ export default function NetworkScannerPage() {
   const [result, setResult] = useState<ScanResult | null>(null);
   const [scanning, setScanning] = useState(false);
 
-  const handleScan = () => {
+  const handleScan = async () => {
     if (!target) return;
     setScanning(true);
     setResult(null);
-    setTimeout(() => {
-      setResult(dummyResults[target] || dummyResults["192.168.1.1"]!);
+
+    try {
+      const response = await fetch("http://localhost:8000/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target }),
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setResult({
+          ip: target,
+          hostname: data.hostname || "unknown",
+          overallRisk: data.overall_risk,
+          ports: data.ports.map((p: any) => ({
+             port: p.port,
+             service: p.service,
+             state: "open",
+             risk: p.risk
+          }))
+        });
+      }
+    } catch (err) {
+      console.error("Scanning failed:", err);
+    } finally {
       setScanning(false);
-    }, 2000);
+    }
   };
 
   return (
@@ -68,7 +67,7 @@ export default function NetworkScannerPage() {
           </button>
         </div>
         <div className="flex gap-2 mt-3">
-          {Object.keys(dummyResults).map((ip) => (
+          {["192.168.1.1", "10.0.0.5", "localhost"].map((ip) => (
             <button key={ip} onClick={() => setTarget(ip)} className="px-3 py-1 rounded-full text-xs font-mono bg-secondary hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors">{ip}</button>
           ))}
         </div>

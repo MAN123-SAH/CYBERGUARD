@@ -1,28 +1,54 @@
-import { useState } from "react";
-import { Filter, AlertTriangle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Filter, AlertTriangle, RefreshCw } from "lucide-react";
 
-const alerts = [
-  { id: 1, timestamp: "2026-04-12 14:23:01", message: "[**] [1:2024:1] ET POLICY Phishing attempt detected [**]", protocol: "TCP", srcIp: "192.168.1.105", dstIp: "10.0.0.1", severity: "high", isPhishing: true },
-  { id: 2, timestamp: "2026-04-12 14:21:45", message: "[**] [1:2001:3] ET SCAN Potential SSH Brute Force [**]", protocol: "TCP", srcIp: "203.0.113.42", dstIp: "10.0.0.5", severity: "high", isPhishing: false },
-  { id: 3, timestamp: "2026-04-12 14:19:30", message: "[**] [1:1000:2] ET POLICY DNS Query to suspicious domain [**]", protocol: "UDP", srcIp: "192.168.1.22", dstIp: "8.8.8.8", severity: "medium", isPhishing: true },
-  { id: 4, timestamp: "2026-04-12 14:15:12", message: "[**] [1:3001:1] ET EXPLOIT Apache Struts RCE [**]", protocol: "TCP", srcIp: "45.33.32.156", dstIp: "10.0.0.3", severity: "high", isPhishing: false },
-  { id: 5, timestamp: "2026-04-12 14:10:05", message: "[**] [1:4000:1] ET MALWARE Win32.Trojan callback [**]", protocol: "TCP", srcIp: "10.0.0.8", dstIp: "185.220.101.1", severity: "high", isPhishing: false },
-  { id: 6, timestamp: "2026-04-12 14:05:33", message: "[**] [1:2025:1] ET POLICY Suspicious URL in email body [**]", protocol: "TCP", srcIp: "192.168.1.50", dstIp: "10.0.0.1", severity: "medium", isPhishing: true },
-  { id: 7, timestamp: "2026-04-12 13:58:20", message: "[**] [1:5000:1] ET INFO ICMP Ping sweep detected [**]", protocol: "ICMP", srcIp: "172.16.0.100", dstIp: "10.0.0.0/24", severity: "low", isPhishing: false },
-  { id: 8, timestamp: "2026-04-12 13:45:10", message: "[**] [1:2026:1] ET PHISHING Credential harvesting page [**]", protocol: "TCP", srcIp: "192.168.1.200", dstIp: "93.184.216.34", severity: "high", isPhishing: true },
-];
+type Alert = {
+  id: number;
+  timestamp: string;
+  message: string;
+  protocol: string;
+  src_ip: string;
+  dst_ip: string;
+  severity: string;
+  is_phishing: number;
+};
 
 const sevColor = { high: "text-destructive bg-destructive/10", medium: "text-cyber-warning bg-cyber-warning/10", low: "text-primary bg-primary/10" };
 
 export default function IDSAlertsPage() {
   const [severityFilter, setSeverityFilter] = useState("all");
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchAlerts = async () => {
+    try {
+      const response = await fetch("http://localhost:8000/api/alerts?limit=50");
+      if (response.ok) {
+        const data = await response.json();
+        setAlerts(data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch alerts:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAlerts();
+    const interval = setInterval(fetchAlerts, 5000); // Poll every 5s
+    return () => clearInterval(interval);
+  }, []);
+
   const filtered = alerts.filter((a) => severityFilter === "all" || a.severity === severityFilter);
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold font-mono text-foreground">IDS Alerts (Snort)</h1>
+          <h1 className="text-2xl font-bold font-mono text-foreground flex items-center gap-2">
+            IDS Alerts (Snort)
+            {loading && <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />}
+          </h1>
           <p className="text-sm text-muted-foreground">{alerts.length} alerts captured</p>
         </div>
         <div className="flex items-center gap-2">
@@ -52,25 +78,31 @@ export default function IDSAlertsPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((a) => (
-              <tr key={a.id} className={`border-b border-border/50 hover:bg-secondary/50 transition-colors ${a.isPhishing ? "bg-destructive/5" : ""}`}>
-                <td className="p-3 font-mono text-xs text-muted-foreground whitespace-nowrap">{a.timestamp}</td>
-                <td className="p-3 text-xs text-foreground max-w-xs truncate">
-                  <div className="flex items-center gap-2">
-                    {a.isPhishing && <AlertTriangle className="w-3 h-3 text-destructive shrink-0" />}
-                    <span className={a.isPhishing ? "text-destructive" : ""}>{a.message}</span>
-                  </div>
-                </td>
-                <td className="p-3 font-mono text-xs text-muted-foreground">{a.protocol}</td>
-                <td className="p-3 font-mono text-xs text-muted-foreground">{a.srcIp}</td>
-                <td className="p-3 font-mono text-xs text-muted-foreground">{a.dstIp}</td>
-                <td className="p-3">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${sevColor[a.severity as keyof typeof sevColor]}`}>
-                    {a.severity.toUpperCase()}
-                  </span>
-                </td>
+            {filtered.length === 0 && !loading ? (
+              <tr>
+                <td colSpan={6} className="p-8 text-center text-muted-foreground font-mono">No alerts found. Monitoring network...</td>
               </tr>
-            ))}
+            ) : (
+              filtered.map((a) => (
+                <tr key={a.id} className={`border-b border-border/50 hover:bg-secondary/50 transition-colors ${a.is_phishing === 1 ? "bg-destructive/5" : ""}`}>
+                  <td className="p-3 font-mono text-xs text-muted-foreground whitespace-nowrap">{new Date(a.timestamp).toLocaleString()}</td>
+                  <td className="p-3 text-xs text-foreground max-w-xs truncate">
+                    <div className="flex items-center gap-2">
+                      {a.is_phishing === 1 && <AlertTriangle className="w-3 h-3 text-destructive shrink-0" />}
+                      <span className={a.is_phishing === 1 ? "text-destructive" : ""}>{a.message}</span>
+                    </div>
+                  </td>
+                  <td className="p-3 font-mono text-xs text-muted-foreground">{a.protocol}</td>
+                  <td className="p-3 font-mono text-xs text-muted-foreground">{a.src_ip}</td>
+                  <td className="p-3 font-mono text-xs text-muted-foreground">{a.dst_ip}</td>
+                  <td className="p-3">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${sevColor[a.severity.toLowerCase() as keyof typeof sevColor]}`}>
+                      {a.severity.toUpperCase()}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

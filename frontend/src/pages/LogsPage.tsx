@@ -1,19 +1,48 @@
-import { Download, FileText } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Download, FileText, RefreshCw } from "lucide-react";
 
-const logs = [
-  { id: 1, date: "2026-04-12", type: "Threat Report", entries: 247, status: "Complete" },
-  { id: 2, date: "2026-04-11", type: "Network Scan", entries: 15, status: "Complete" },
-  { id: 3, date: "2026-04-11", type: "IDS Alert Summary", entries: 89, status: "Complete" },
-  { id: 4, date: "2026-04-10", type: "Phishing Analysis", entries: 34, status: "Complete" },
-  { id: 5, date: "2026-04-09", type: "System Audit", entries: 512, status: "Complete" },
-  { id: 6, date: "2026-04-12", type: "Live Capture Log", entries: 1024, status: "In Progress" },
-];
+type LogSummary = {
+  id: number;
+  date: string;
+  type: string;
+  entries: number;
+  status: string;
+  download_type: string;
+};
 
 export default function LogsPage() {
+  const [logs, setLogs] = useState<LogSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSummary = async () => {
+      try {
+        const response = await fetch("http://localhost:8000/api/logs/summary");
+        if (response.ok) {
+          const data = await response.json();
+          setLogs(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch logs summary", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchSummary();
+  }, []);
+
+  const handleDownload = (download_type: string) => {
+    if (download_type === "none") return;
+    window.location.href = `http://localhost:8000/api/logs/export?type=${download_type}&format=csv`;
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div>
-        <h1 className="text-2xl font-bold font-mono text-foreground">Logs & Reports</h1>
+        <h1 className="text-2xl font-bold font-mono text-foreground flex items-center gap-2">
+          Logs & Reports
+          {loading && <RefreshCw className="w-4 h-4 animate-spin text-muted-foreground" />}
+        </h1>
         <p className="text-sm text-muted-foreground">View and download security reports</p>
       </div>
 
@@ -47,7 +76,12 @@ export default function LogsPage() {
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-mono ${l.status === "Complete" ? "bg-primary/10 text-primary" : "bg-cyber-warning/10 text-cyber-warning"}`}>{l.status}</span>
                 </td>
                 <td className="p-3">
-                  <button className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
+                  <button
+                    onClick={() => handleDownload(l.download_type)}
+                    disabled={l.download_type === "none"}
+                    className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
+                    title={l.download_type === "none" ? "Cannot download files in progress" : "Download CSV"}
+                  >
                     <Download className="w-4 h-4" />
                   </button>
                 </td>

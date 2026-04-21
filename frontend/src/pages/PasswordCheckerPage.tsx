@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Eye, EyeOff, CheckCircle, XCircle, AlertTriangle } from "lucide-react";
 
 const checks = [
@@ -14,6 +14,8 @@ const checks = [
 export default function PasswordCheckerPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [pwnedCount, setPwnedCount] = useState<number | null>(null);
+  const [checkingPwned, setCheckingPwned] = useState(false);
 
   const { score, label, color, suggestions } = useMemo(() => {
     if (!password) return { score: 0, label: "Enter a password", color: "text-muted-foreground", suggestions: [] };
@@ -26,6 +28,32 @@ export default function PasswordCheckerPage() {
     if (pct < 50) return { score: pct, label: "Weak", color: "text-destructive", suggestions: sugs };
     if (pct < 80) return { score: pct, label: "Moderate", color: "text-cyber-warning", suggestions: sugs };
     return { score: pct, label: "Strong", color: "text-primary", suggestions: sugs };
+  }, [password]);
+
+  useEffect(() => {
+    if (!password || password.length < 5) {
+      setPwnedCount(null);
+      return;
+    }
+    const timeout = setTimeout(async () => {
+      setCheckingPwned(true);
+      try {
+        const res = await fetch("http://localhost:8000/api/password/check", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setPwnedCount(data.breach_count);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setCheckingPwned(false);
+      }
+    }, 800); // 800ms debounce
+    return () => clearTimeout(timeout);
   }, [password]);
 
   return (
@@ -62,6 +90,25 @@ export default function PasswordCheckerPage() {
           </div>
         )}
       </div>
+
+      {password && (
+        <div className={`mt-4 cyber-card p-4 flex items-center justify-between border ${pwnedCount && pwnedCount > 0 ? "border-destructive bg-destructive/10" : "border-border"}`}>
+          <div>
+            <h3 className="text-sm font-bold font-mono flex items-center gap-2 text-foreground">
+              Have I Been Pwned?
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              {checkingPwned ? "Checking breach databases..." :
+                pwnedCount === null ? "Waiting for more characters..." :
+                  pwnedCount > 0 ? `Exposed in ${pwnedCount.toLocaleString()} data breaches!` :
+                    "Not found in any known breaches."}
+            </p>
+          </div>
+          {!checkingPwned && pwnedCount !== null && (
+            pwnedCount > 0 ? <AlertTriangle className="w-8 h-8 text-destructive animate-pulse" /> : <CheckCircle className="w-8 h-8 text-primary" />
+          )}
+        </div>
+      )}
 
       {password && (
         <>
